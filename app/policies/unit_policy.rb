@@ -7,6 +7,14 @@ class UnitPolicy < ApplicationPolicy
     true
   end
 
+  # Members of the unit's subtree and leaders of units above it
+  def activity?
+    return false unless user
+    user.has_permission?("admin") ||
+      user.active_assignment_unit_path_ids.include?(record.id) ||
+      user.active_assignments.where(unit_id: record.ancestor_ids).exists?
+  end
+
   def attendance?
     user&.member?
   end

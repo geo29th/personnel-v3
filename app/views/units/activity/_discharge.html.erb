@@ -1,0 +1,3 @@
+<% label = {"honorable" => "honorably", "general" => "generally", "dishonorable" => "dishonorably"}[record.type] %>
+<%= link_to record.user %> was
+<%= link_to_forum_topic "#{label} discharged", record %>

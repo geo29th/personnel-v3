@@ -8,6 +8,10 @@ class UnitsController < ApplicationController
     @assignments = Assignment.active.roster(units.ids)
   end
 
+  def activity
+    @activity = UnitActivityFeed.call(@unit, page: params[:page])
+  end
+
   def attendance
     @events = Event.for_unit(@unit.subtree) # include inactive units
       .past

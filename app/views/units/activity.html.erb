@@ -1,0 +1,20 @@
+<% content_for(:page_title) { "#{@unit.subtree_abbr} - Activity" } %>
+
+<h2>Activity</h2>
+
+<% if @activity.empty? %>
+  <p class="text-muted">No activity yet.</p>
+<% end %>
+
+<div class="unit-activity">
+  <% @activity.chunk_while { |a, b| a.date == b.date }.each do |items| %>
+    <h3 class="unit-activity__date"><time><%= items.first.date.strftime("%F") %></time></h3>
+    <ul class="unit-activity__items">
+      <% items.each do |item| %>
+        <li><%= render "units/activity/#{item.type}", record: item.record %></li>
+      <% end %>
+    </ul>
+  <% end %>
+</div>
+
+<%= paginate @activity %>

@@ -140,6 +140,43 @@ class UnitsControllerTest < ActionDispatch::IntegrationTest
     assert_match "Accepted", response.body
   end
 
+  test "activity renders each kind of subtree activity" do
+    event = create(:event, unit: @squad, mandatory: true,
+      starts_at: 1.week.ago, type: "Squad Drills")
+    create(:attendance_record, user: @member, event: event, attended: true)
+    create(:user_award, user: @member, award: create(:award, title: "Shiny medal"))
+    create(:ait_qualification, user: @member)
+    create(:promotion, user: @member, rank_abbr: "Cpl.")
+    create(:extended_loa, user: @member)
+
+    dischargee = create(:user, last_name: "Dischargeson")
+    create(:assignment, user: dischargee, unit: @squad,
+      start_date: 1.year.ago, end_date: 1.month.ago)
+    create(:discharge, user: dischargee, date: 1.month.ago, type: :honorable)
+
+    sign_in_as @member
+    get unit_activity_url(@company)
+
+    assert_response :success
+    assert_match "Squad Drills</a> attendance was", response.body
+    assert_match "Shiny medal", response.body
+    assert_match "AIT Progress", response.body
+    assert_match "promoted", response.body
+    assert_match "Extended LOA", response.body
+    assert_match "was assigned to", response.body
+    assert_match "honorably discharged", response.body
+  end
+
+  test "activity refuses users outside the unit" do
+    outsider = create(:user)
+    create(:assignment, user: outsider, unit: create(:unit, abbr: "Baker Co. HQ"))
+
+    sign_in_as outsider
+    get unit_activity_url(@company)
+
+    assert_redirected_to root_url
+  end
+
   test "member-only pages refuse non-members" do
     non_member = create(:user)
 

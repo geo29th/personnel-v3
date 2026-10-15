@@ -77,3 +77,14 @@ table.unit-stats {
     }
   }
 }
+
+.unit-activity {
+  .unit-activity__date {
+    font-size: 1.25rem;
+    margin-top: 1rem;
+  }
+
+  .unit-activity__items {
+    margin-bottom: 0;
+  }
+}

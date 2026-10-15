@@ -64,6 +64,7 @@ Rails.application.routes.draw do
   end
 
   resources :units, only: [:show] do
+    get "activity", to: "units#activity"
     get "attendance", to: "units#attendance"
     get "awols", to: "units#awols"
     get "missing-awards", to: "units#missing_awards"

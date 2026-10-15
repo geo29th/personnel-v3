@@ -1,0 +1,6 @@
+<% totals = record.attendance_totals %>
+<%= link_to record.title, record %> attendance was
+<%= totals.total_attended || 0 %>/<%= totals.total_expected %>
+<% if record.mandatory %>
+  (<%= pluralize(totals.total_absent, "AWOL") %>)
+<% end %>

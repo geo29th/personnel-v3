@@ -1,0 +1,7 @@
+<%= link_to record.user %> was
+<% if record.demotion? %>
+  <%= link_to_forum_topic "demoted", record %>
+<% else %>
+  <%= link_to_forum_topic "promoted", record %>
+<% end %>
+to <%= record.new_rank.name %>

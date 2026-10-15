@@ -1,0 +1,3 @@
+<%= link_to record.user %> posted an
+<%= link_to "Extended LOA", user_extended_loas_path(record.user) %>
+from <%= record.start_date.strftime("%F") %> to <%= record.end_date.strftime("%F") %>
