@@ -2,9 +2,13 @@
 
 <h2>Activity</h2>
 
-<% if @activity.empty? %>
-  <p class="text-muted">No activity yet.</p>
-<% end %>
+<p class="text-muted">
+  <% if @activity.empty? %>
+    No activity in the last <%= UnitActivityFeed::WINDOW_DAYS %> days.
+  <% else %>
+    Showing activity from the last <%= UnitActivityFeed::WINDOW_DAYS %> days.
+  <% end %>
+</p>
 
 <div class="unit-activity">
   <% @activity.chunk_while { |a, b| a.date == b.date }.each do |items| %>

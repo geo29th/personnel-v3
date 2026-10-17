@@ -22,15 +22,29 @@ class UnitActivityFeedTest < ActiveSupport::TestCase
   test "only includes member activity while they were assigned to the subtree" do
     transferee = create(:user)
     create(:assignment, user: transferee, unit: @squad,
-      start_date: 1.year.ago, end_date: 6.months.ago)
-    create(:assignment, user: transferee, unit: @other_squad, start_date: 6.months.ago)
-    before = create(:user_award, user: transferee, date: 9.months.ago)
-    after = create(:user_award, user: transferee, date: 1.month.ago)
+      start_date: 1.year.ago, end_date: 15.days.ago)
+    create(:assignment, user: transferee, unit: @other_squad, start_date: 15.days.ago)
+    before = create(:user_award, user: transferee, date: 20.days.ago)
+    after = create(:user_award, user: transferee, date: 5.days.ago)
 
     records = UnitActivityFeed.call(@company).map(&:record)
 
     assert_includes records, before
     refute_includes records, after
+  end
+
+  test "only includes the last 30 days, including today" do
+    today = create(:promotion, user: @member, date: Date.current)
+    oldest = create(:promotion, user: @member, date: Date.current - 29)
+    too_old = create(:promotion, user: @member, date: Date.current - 30)
+    future = create(:promotion, user: @member, date: Date.current + 1)
+
+    records = UnitActivityFeed.call(@company).map(&:record)
+
+    assert_includes records, today
+    assert_includes records, oldest
+    refute_includes records, too_old
+    refute_includes records, future
   end
 
   test "groups AIT progress by member, author and day" do
@@ -58,8 +72,8 @@ class UnitActivityFeedTest < ActiveSupport::TestCase
 
     page = UnitActivityFeed.call(@company, page: 2, per_page: 2)
 
-    assert_equal 4, page.total_count # 3 promotions + 1 assignment
+    assert_equal 3, page.total_count # the assignment started a year ago
     assert_equal 2, page.current_page
-    assert_equal 2, page.size
+    assert_equal 1, page.size
   end
 end

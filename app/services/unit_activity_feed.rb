@@ -4,6 +4,7 @@
 #
 # Items are merged in SQL with UNION ALL so pagination happens in the database,
 # then each page's records are loaded per type with their associations.
+# Only the last WINDOW_DAYS days, including today, are included.
 #
 # Member-related activity (everything except events and assignments) is
 # attributed to the unit if the member was assigned within its subtree on the
@@ -12,6 +13,7 @@ class UnitActivityFeed
   include Service
 
   PER_PAGE = 50
+  WINDOW_DAYS = 30
 
   Item = Data.define(:type, :date, :record)
 
@@ -19,6 +21,7 @@ class UnitActivityFeed
     @unit_ids = unit.subtree.ids # include inactive units
     @page = [page.to_i, 1].max
     @per_page = per_page
+    @window = (Date.current - (WINDOW_DAYS - 1))..Date.current
   end
 
   def call
@@ -43,52 +46,49 @@ class UnitActivityFeed
   def connection = ActiveRecord::Base.connection
 
   def union_sql
-    @union_sql ||= sources.values.map(&:to_sql).join(" UNION ALL ")
+    @union_sql ||= sources.map do |type, relation, id_sql, date_sql|
+      relation
+        .select("#{connection.quote(type)} AS item_type, #{id_sql} AS item_id, #{date_sql} AS item_date")
+        .where("#{date_sql} BETWEEN ? AND ?", @window.begin, @window.end)
+        .to_sql
+    end.join(" UNION ALL ")
   end
 
+  # [type, relation, id SQL, date SQL]
   def sources
-    {
-      "ExtendedLOA" => ExtendedLOA
-        .select(item_columns("ExtendedLOA", "eloas.id", "COALESCE(DATE(eloas.posting_date), eloas.start_date)"))
-        .where(assigned_in_subtree_on("eloas", "COALESCE(DATE(eloas.posting_date), eloas.start_date)")),
+    eloa_date = "COALESCE(DATE(eloas.posting_date), eloas.start_date)"
 
-      "Event" => Event
-        .select(item_columns("Event", "events.id", "DATE(events.starts_at)"))
-        .for_unit(@unit_ids)
-        .past
+    [
+      ["ExtendedLOA", ExtendedLOA.where(assigned_in_subtree_on("eloas", eloa_date)),
+        "eloas.id", eloa_date],
+
+      ["Event", Event.for_unit(@unit_ids).past
         .where(AttendanceRecord.where("attendance.event_id = events.id").arel.exists),
+        "events.id", "DATE(events.starts_at)"],
 
-      "UserAward" => UserAward
-        .select(item_columns("UserAward", "awardings.id", "awardings.date"))
-        .where(assigned_in_subtree_on("awardings", "awardings.date")),
+      ["UserAward", UserAward.where(assigned_in_subtree_on("awardings", "awardings.date")),
+        "awardings.id", "awardings.date"],
 
       # One item per member, author and day, like v2
-      "AITQualification" => AITQualification
-        .select(item_columns("AITQualification", "MIN(qualifications.id)", "qualifications.date"))
+      ["AITQualification", AITQualification
         .where(assigned_in_subtree_on("qualifications", "qualifications.date"))
         .group(:member_id, :author_member_id, :date),
+        "MIN(qualifications.id)", "qualifications.date"],
 
-      "Promotion" => Promotion
-        .select(item_columns("Promotion", "promotions.id", "promotions.date"))
-        .where(assigned_in_subtree_on("promotions", "promotions.date")),
+      ["Promotion", Promotion.where(assigned_in_subtree_on("promotions", "promotions.date")),
+        "promotions.id", "promotions.date"],
 
-      "Assignment" => Assignment
-        .select(item_columns("Assignment", "assignments.id", "assignments.start_date"))
-        .where(unit_id: @unit_ids),
+      ["Assignment", Assignment.where(unit_id: @unit_ids),
+        "assignments.id", "assignments.start_date"],
 
       # Matches Discharge.for_unit: assignments in the subtree ended on the discharge date
-      "Discharge" => Discharge
-        .select(item_columns("Discharge", "discharges.id", "discharges.date"))
-        .where(Assignment
-          .where("assignments.member_id = discharges.member_id")
-          .where("assignments.end_date = discharges.date")
-          .where(unit_id: @unit_ids)
-          .arel.exists)
-    }
-  end
-
-  def item_columns(type, id_sql, date_sql)
-    "#{connection.quote(type)} AS item_type, #{id_sql} AS item_id, #{date_sql} AS item_date"
+      ["Discharge", Discharge.where(Assignment
+        .where("assignments.member_id = discharges.member_id")
+        .where("assignments.end_date = discharges.date")
+        .where(unit_id: @unit_ids)
+        .arel.exists),
+        "discharges.id", "discharges.date"]
+    ]
   end
 
   def assigned_in_subtree_on(table, date_sql)

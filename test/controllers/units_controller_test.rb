@@ -151,8 +151,8 @@ class UnitsControllerTest < ActionDispatch::IntegrationTest
 
     dischargee = create(:user, last_name: "Dischargeson")
     create(:assignment, user: dischargee, unit: @squad,
-      start_date: 1.year.ago, end_date: 1.month.ago)
-    create(:discharge, user: dischargee, date: 1.month.ago, type: :honorable)
+      start_date: 1.year.ago, end_date: 1.week.ago)
+    create(:discharge, user: dischargee, date: 1.week.ago, type: :honorable)
 
     sign_in_as @member
     get unit_activity_url(@company)
