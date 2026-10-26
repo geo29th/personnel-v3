@@ -67,6 +67,32 @@ class UnitActivityFeedTest < ActiveSupport::TestCase
     refute_includes records, unreported
   end
 
+  test "dates events in their own time zone, across a daylight saving change" do
+    eastern = ActiveSupport::TimeZone["Eastern Time (US & Canada)"]
+    pacific = ActiveSupport::TimeZone["Pacific Time (US & Canada)"]
+
+    travel_to eastern.local(2026, 11, 3, 12) do
+      # Each starts on the next day in UTC
+      before_change = create(:event, unit: @squad, time_zone: eastern.name,
+        starts_at: eastern.local(2026, 10, 31, 21)) # EDT
+      after_change = create(:event, unit: @squad, time_zone: eastern.name,
+        starts_at: eastern.local(2026, 11, 2, 20)) # EST
+      west_coast = create(:event, unit: @squad, time_zone: pacific.name,
+        starts_at: pacific.local(2026, 11, 1, 19)) # PST
+      [before_change, after_change, west_coast].each do |event|
+        create(:attendance_record, user: @member, event:, attended: true)
+      end
+
+      dates = UnitActivityFeed.call(@company)
+        .select { |item| item.type == :event }
+        .to_h { |item| [item.record, item.date] }
+
+      assert_equal Date.new(2026, 10, 31), dates[before_change]
+      assert_equal Date.new(2026, 11, 2), dates[after_change]
+      assert_equal Date.new(2026, 11, 1), dates[west_coast]
+    end
+  end
+
   test "paginates" do
     create_list(:promotion, 3, user: @member)
 

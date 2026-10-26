@@ -62,9 +62,11 @@ class UnitActivityFeed
       ["ExtendedLOA", ExtendedLOA.where(assigned_in_subtree_on("eloas", eloa_date)),
         "eloas.id", eloa_date],
 
-      ["Event", Event.for_unit(@unit_ids).past
+      # Recorded attendance means the event happened, so no Event.past here: it
+      # compares with midnight UTC and would hide last night's drills
+      ["Event", Event.for_unit(@unit_ids)
         .where(AttendanceRecord.where("attendance.event_id = events.id").arel.exists),
-        "events.id", "DATE(events.starts_at)"],
+        "events.id", event_local_date_sql],
 
       ["UserAward", UserAward.where(assigned_in_subtree_on("awardings", "awardings.date")),
         "awardings.id", "awardings.date"],
@@ -89,6 +91,33 @@ class UnitActivityFeed
         .arel.exists),
         "discharges.id", "discharges.date"]
     ]
+  end
+
+  # An event's date in its own time zone (see Event#starts_at_local), since
+  # starts_at is stored in UTC and evening drills fall on the next UTC day.
+  def event_local_date_sql
+    whens = Event::TIMEZONES.map do |zone|
+      "WHEN #{connection.quote(zone)} THEN #{local_date_sql("events.starts_at", ActiveSupport::TimeZone[zone])}"
+    end
+    "CASE events.time_zone #{whens.join(" ")} ELSE #{local_date_sql("events.starts_at", Time.zone)} END"
+  end
+
+  # Converts a UTC datetime column to a date in the given zone using the zone's
+  # UTC offsets around the window, switching offset at any daylight saving
+  # change. Avoids CONVERT_TZ, which needs MySQL's time zone tables loaded.
+  def local_date_sql(column, zone)
+    from = (@window.begin - 1).in_time_zone(zone)
+    to = (@window.end + 2).in_time_zone(zone)
+    changes = zone.tzinfo.transitions_up_to(to.utc, from.utc).map { |t| t.at.to_time.utc }
+    offsets = [from, *changes].map { |time| time.in_time_zone(zone).utc_offset }
+    date_at = ->(offset) { "DATE(#{column} + INTERVAL #{offset.to_i} SECOND)" }
+
+    return date_at.call(offsets.first) if changes.empty?
+
+    whens = changes.each_with_index.map do |change, i|
+      "WHEN #{column} < #{connection.quote(change)} THEN #{date_at.call(offsets[i])}"
+    end
+    "CASE #{whens.join(" ")} ELSE #{date_at.call(offsets.last)} END"
   end
 
   def assigned_in_subtree_on(table, date_sql)
